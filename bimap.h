@@ -373,9 +373,8 @@ struct bimap {
     friend bool operator==(bimap const& a, bimap const& b) {
         if (a.size() != b.size())
             return false;
-        auto it_a = a.begin_left();
-        auto it_b = b.begin_left();
-        for (;it_a != a.end_left() && it_b != b.end_left(); ++it_a, ++it_b) {
+        for (auto it_a = a.begin_left(), it_b = b.begin_left();
+             it_a != a.end_left() && it_b != b.end_left(); ++it_a, ++it_b) {
             if (*it_a != *it_b || *it_a.flip() != *it_b.flip())
                 return false;
         }
