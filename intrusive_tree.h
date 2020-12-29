@@ -12,7 +12,7 @@ struct default_tag;
 
 std::mt19937 rand_gen(std::random_device{}());
 
-template <typename T, typename Compare = std::less<T>, typename Tag = default_tag>
+template <typename T, typename Compare, typename Tag = default_tag>
 struct bitree {
     struct d_node;
 
@@ -32,7 +32,7 @@ struct bitree {
             return static_cast<d_node const&>(*this);
         }
 
-        bool isLeft() const {
+        [[nodiscard]] bool isLeft() const {
             assert(parent);
             return parent->left == this;
         }
@@ -90,6 +90,15 @@ struct bitree {
         }
 
         iterator& operator--() {
+            if (it_node->left) {
+                it_node = it_node->left;
+                while (it_node->right)
+                    it_node = it_node->right;
+            } else {
+                while (it_node->isLeft())
+                    it_node = it_node->parent;
+                it_node = it_node->parent;
+            }
             return *this;
         }
 
@@ -111,7 +120,8 @@ struct bitree {
         p_node const* it_node;
     };
 
-    bitree() noexcept = default;
+    explicit bitree(Compare cmp = std::less<T>()) noexcept
+        : cmp(cmp) {};
 
     bitree(bitree&& other)  noexcept
             : fake_node(other.fake_node) {
@@ -128,9 +138,9 @@ struct bitree {
     iterator find(T const& x) const {
         p_node* n = fake_node.left;
         while (n) {
-            if (comp(x, n->get_data().key)) {
+            if (cmp(x, n->get_data().key)) {
                 n = n->left;
-            } else if (comp(n->get_data().key, x)) {
+            } else if (cmp(n->get_data().key, x)) {
                 n = n->right;
             } else {
                 return iterator(n);
@@ -156,7 +166,7 @@ struct bitree {
         p_node const* n = fake_node.left;
         p_node const* buf = &fake_node;
         while (n) {
-            if (!comp(n->get_data().key, x)) {
+            if (!cmp(n->get_data().key, x)) {
                 buf = n;
                 n = n->left;
             } else {
@@ -170,7 +180,7 @@ struct bitree {
         p_node const* n = fake_node.left;
         p_node const* buf = &fake_node;
         while (n) {
-            if (comp(x, n->get_data().key)) {
+            if (cmp(x, n->get_data().key)) {
                 buf = n;
                 n = n->left;
             } else {
@@ -197,7 +207,7 @@ struct bitree {
 
   private:
     p_node fake_node;
-    Compare comp;
+    Compare cmp;
 
     void update_parent(p_node* node, p_node* parent) {
         if (node)
@@ -207,7 +217,7 @@ struct bitree {
     void split (p_node* t, T const& key, p_node* & l, p_node* & r) {
         if (!t) {
             l = r = nullptr;
-        } else if (comp(key, t->get_data().key)) {
+        } else if (cmp(key, t->get_data().key)) {
             split(t->left, key, l, t->left);
             update_parent(t->left, t);
             r = t;
@@ -229,7 +239,7 @@ struct bitree {
                 update_parent(it->right, it);
                 t = it;
             } else {
-                if (comp(it->get_data().key, t->get_data().key)) {
+                if (cmp(it->get_data().key, t->get_data().key)) {
                     auto ret = insert(t->left, it);
                     update_parent(t->left, t);
                     return ret;
@@ -258,10 +268,10 @@ struct bitree {
     }
 
     void erase (p_node* & t, T const& key) {
-        if (!comp(t->get_data().key, key) && !comp(key, t->get_data().key)) {
+        if (!cmp(t->get_data().key, key) && !cmp(key, t->get_data().key)) {
             merge(t, t->left, t->right);
         } else {
-            if (comp(key, t->get_data().key)) {
+            if (cmp(key, t->get_data().key)) {
                 erase(t->left, key);
                 update_parent(t->left, t);
             } else {
