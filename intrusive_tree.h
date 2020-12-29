@@ -121,6 +121,7 @@ struct bitree {
     bitree& operator=(bitree&& other) noexcept {
         fake_node = other.fake_node;
         other.fake_node.reset();
+        return *this;
     }
 
 
