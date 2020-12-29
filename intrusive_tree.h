@@ -4,7 +4,6 @@
 
 #pragma once
 #include <utility>
-#include <optional>
 #include <cassert>
 #include <random>
 
