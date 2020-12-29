@@ -12,7 +12,7 @@
 namespace intrusive_tree {
 struct default_tag;
 
-
+std::mt19937 rand_gen(std::random_device{}());
 
 template <typename T, typename Compare = std::less<T>, typename Tag = default_tag>
 struct bitree {
@@ -29,14 +29,25 @@ struct bitree {
             return static_cast<d_node&>(*this);
         }
 
-        bool isLeft() {
+        d_node const& get_data() const {
+            assert(parent);
+            return static_cast<d_node const&>(*this);
+        }
+
+        bool isLeft() const {
             assert(parent);
             return parent->left == this;
+        }
+
+        void reset() {
+            left = nullptr;
+            right = nullptr;
+            parent = nullptr;
         }
     };
 
   public:
-    struct d_node : private p_node {
+    struct d_node : p_node {
         T key;
 
         explicit d_node(T key) noexcept
@@ -44,14 +55,20 @@ struct bitree {
               priority(rand_gen())
         {}
 
+        uint_fast32_t get_pr() {
+            return priority;
+        }
+
       private:
         const uint_fast32_t priority;
     };
 
     struct iterator {
         iterator(p_node* n) : it_node(n) {}
+        iterator(p_node const* n) : it_node(n) {}
+        iterator(d_node* n) : it_node(n) {}
 
-        d_node* operator*() const {
+        d_node const* operator*() const {
             return &(it_node->get_data());
         }
 
@@ -93,142 +110,153 @@ struct bitree {
         }
 
       private:
-        p_node* it_node;
+        p_node const* it_node;
     };
+
+    bitree() noexcept = default;
 
     bitree(bitree&& other)  noexcept
             : fake_node(other.fake_node) {
-        other.root = new p_node();
+        other.fake_node.reset();
     }
 
     bitree& operator=(bitree&& other) noexcept {
         fake_node = other.fake_node;
-        other.root = new p_node();
+        other.fake_node.reset();
     }
 
 
     iterator find(T const& x) const {
-        p_node* n = fake_node->left;
+        p_node* n = fake_node.left;
         while (!n) {
             if (comp(x, n->get_data().key)) {
                 n = n->left;
             } else if (comp(n->get_data().key, x)) {
                 n = n->right;
             } else {
-                return n;
+                return iterator(n);
             }
         }
         return end();
+    }
+
+    iterator erase(T const& x) {
+        erase(fake_node.left, x);
+        update_parent(fake_node.left, &fake_node);
+        return lower_bound(x);
+    }
+
+    iterator insert(d_node* x) {
+        auto ret = insert(fake_node.left, x);
+        update_parent(fake_node.left, &fake_node);
+        return ret;
     }
 
 
     iterator lower_bound(T const& x) const {
-        p_node* n = fake_node->left;
+        p_node const* n = fake_node.left;
+        p_node const* buf = &fake_node;
         while (!n) {
-            if (comp(x, n->get_data().key)) {
+            if (!comp(n->get_data().key, x)) {
+                buf = n;
                 n = n->left;
-            } else if (comp(n->get_data().key, x)) {
-                n = n->right;
             } else {
-                return n;
+                n = n->right;
             }
         }
-        return end();
+        return buf;
     }
 
     iterator upper_bound(T const& x) const {
-        p_node* n = fake_node->left;
+        p_node const* n = fake_node.left;
+        p_node const* buf = &fake_node;
         while (!n) {
             if (comp(x, n->get_data().key)) {
+                buf = n;
                 n = n->left;
-            } else if (comp(n->get_data().key, x)) {
-                n = n->right;
             } else {
-                return n;
+                n = n->right;
             }
         }
-        return end();
+        return buf;
     }
 
     iterator begin() const {
-        p_node* cur = fake_node;
+        p_node const* cur = &fake_node;
         while (cur->left)
             cur = cur->left;
         return cur;
     }
 
     iterator end() const {
-        return fake_node;
+        return iterator(&fake_node);
     }
 
-    bool empty() const {
-        return fake_node->left == nullptr;
+    [[nodiscard]] bool empty() const {
+        return fake_node.left == nullptr;
     }
 
   private:
-    p_node *fake_node;
-    static std::mt19937 rand_gen;
+    p_node fake_node;
     Compare comp;
 
-    void split (p_node* t, T key, p_node* & l, p_node* & r) {
+    void update_parent(p_node* node, p_node* parent) {
+        if (node)
+            node->parent = parent;
+    }
+
+    void split (p_node* t, T const& key, p_node* & l, p_node* & r) {
         if (!t) {
             l = r = nullptr;
         } else if (comp(key, t->get_data().key)) {
             split(t->left, key, l, t->left);
-            if (!t->left)
-                t->left->parent = t;
+            update_parent(t->left, t);
             r = t;
         } else {
             split(t->right, key, t->right, r);
-            if (!t->right)
-                t->right->parent = t;
+            update_parent(t->right, t);
             l = t;
         }
     }
 
-    void insert (p_node* & t, p_node* it) {
+    iterator insert (p_node* & t, p_node* it) {
         if (!t) {
             t = it;
         } else {
             it->parent = t->parent;
-            if (it->get_data().priority > t->get_data().priority) {
-                split(t, it->key, it->left, it->right);
-                if (!it->left)
-                    it->left->parent = it;
-                if (!it->right)
-                    it->right->parent = it;
+            if (it->get_data().get_pr() > t->get_data().get_pr()) {
+                split(t, it->get_data().key, it->left, it->right);
+                update_parent(it->left, it);
+                update_parent(it->right, it);
                 t = it;
             } else {
-                insert(it->key < t->key ? t->left : t->right, it);
+                return insert(it->get_data().key < t->get_data().key ? t->left : t->right, it);
             }
         }
+        return it;
     }
 
     void merge (p_node* & t, p_node* l, p_node* r) {
         if (!l || !r) {
             t = l ? l : r;
-        } else if (l->get_data().priority > r->get_data().priority) {
+        } else if (l->get_data().get_pr() > r->get_data().get_pr()) {
             merge(l->right, l->right, r);
-            if (!l->right)
-                l->right->parent = l;
+            update_parent(l->right, l);
             t = l;
         } else {
             merge(r->left, l, r->left);
-            if (!r->left)
-                r->left->parent = r;
+            update_parent(r->left, r);
             t = r;
         }
     }
 
-    void erase (p_node* & t, T key) {
+    void erase (p_node* & t, T const& key) {
         if (!comp(t->get_data().key, key) && !comp(key, t->get_data().key)) {
-            if (!t->left)
-                t->left->parent = t->parent;
-            if (!t->right)
-                t->right->parent = t->parent;
+            update_parent(t->left, t->parent);
+            update_parent(t->right, t->parent);
             merge(t, t->left, t->right);
         } else {
-            erase(comp(key, t->key) ? t->left : t->right, key);
+            erase(comp(key, t->get_data().key) ? t->left : t->right, key);
         }
     }
 };
