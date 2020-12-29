@@ -128,7 +128,7 @@ struct bitree {
 
     iterator find(T const& x) const {
         p_node* n = fake_node.left;
-        while (!n) {
+        while (n) {
             if (comp(x, n->get_data().key)) {
                 n = n->left;
             } else if (comp(n->get_data().key, x)) {
@@ -156,7 +156,7 @@ struct bitree {
     iterator lower_bound(T const& x) const {
         p_node const* n = fake_node.left;
         p_node const* buf = &fake_node;
-        while (!n) {
+        while (n) {
             if (!comp(n->get_data().key, x)) {
                 buf = n;
                 n = n->left;
@@ -170,7 +170,7 @@ struct bitree {
     iterator upper_bound(T const& x) const {
         p_node const* n = fake_node.left;
         p_node const* buf = &fake_node;
-        while (!n) {
+        while (n) {
             if (comp(x, n->get_data().key)) {
                 buf = n;
                 n = n->left;
@@ -230,7 +230,15 @@ struct bitree {
                 update_parent(it->right, it);
                 t = it;
             } else {
-                return insert(it->get_data().key < t->get_data().key ? t->left : t->right, it);
+                if (comp(it->get_data().key, t->get_data().key)) {
+                    auto ret = insert(t->left, it);
+                    update_parent(t->left, t);
+                    return ret;
+                } else {
+                    auto ret = insert(t->right, it);
+                    update_parent(t->right, t);
+                    return ret;
+                }
             }
         }
         return it;
