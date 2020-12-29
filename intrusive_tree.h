@@ -7,7 +7,6 @@
 #include <optional>
 #include <cassert>
 #include <random>
-#include "helper_functions.h"
 
 namespace intrusive_tree {
 struct default_tag;
@@ -260,11 +259,15 @@ struct bitree {
 
     void erase (p_node* & t, T const& key) {
         if (!comp(t->get_data().key, key) && !comp(key, t->get_data().key)) {
-            update_parent(t->left, t->parent);
-            update_parent(t->right, t->parent);
             merge(t, t->left, t->right);
         } else {
-            erase(comp(key, t->get_data().key) ? t->left : t->right, key);
+            if (comp(key, t->get_data().key)) {
+                erase(t->left, key);
+                update_parent(t->left, t);
+            } else {
+                erase(t->right, key);
+                update_parent(t->right, t);
+            }
         }
     }
 };

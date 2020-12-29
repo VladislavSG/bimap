@@ -2,7 +2,6 @@
 #include "intrusive_tree.h"
 #include <stdexcept>
 #include <type_traits>
-#include "helper_functions.h"
 
 template <typename Left, typename Right,
     typename CompareLeft = std::less<Left>,
@@ -204,43 +203,20 @@ struct bimap {
         }
     }
 
-    // TODO use universal reference
     // Вставка пары (left, right), возвращает итератор на left.
     // Если такой left или такой right уже присутствуют в bimap, вставка не
     // производится и возвращается end_left().
-    left_iterator insert(left_t const& left, right_t const& right) {
-        auto* node = new node_t(left, right);
-        right_map.insert(static_cast<right_node_t*>(node));
-        auto ret = left_map.insert(static_cast<left_node_t*>(node));
-        if (ret != left_map.end())
-            ++pair_count;
-        return ret;
-    }
+    template <typename L, typename R>
+    left_iterator insert(L&& left, R&& right) {
+        auto ret = left_map.end();
+        if (left_map.find(left) == left_map.end() &&
+            right_map.find(right) == right_map.end()) {
 
-    left_iterator insert(left_t const& left, right_t&& right) {
-        auto* node = new node_t(left, std::move(right));
-        right_map.insert(static_cast<right_node_t*>(node));
-        auto ret = left_map.insert(static_cast<left_node_t*>(node));
-        if (ret != left_map.end())
+            auto *node = new node_t(std::forward<L>(left), std::forward<R>(right));
+            right_map.insert(static_cast<right_node_t *>(node));
+            ret = left_map.insert(static_cast<left_node_t *>(node));
             ++pair_count;
-        return ret;
-    }
-
-    left_iterator insert(left_t&& left, right_t const& right) {
-        auto* node = new node_t(std::move(left), right);
-        right_map.insert(static_cast<right_node_t*>(node));
-        auto ret = left_map.insert(static_cast<left_node_t*>(node));
-        if (ret != left_map.end())
-            ++pair_count;
-        return ret;
-    }
-
-    left_iterator insert(left_t&& left, right_t&& right) {
-        auto* node = new node_t(std::move(left), std::move(right));
-        right_map.insert(static_cast<right_node_t*>(node));
-        auto ret = left_map.insert(static_cast<left_node_t*>(node));
-        if (ret != left_map.end())
-            ++pair_count;
+        }
         return ret;
     }
 
@@ -379,15 +355,18 @@ struct bimap {
 
     // операторы сравнения
     friend bool operator!=(bimap const& a, bimap const& b) {
-        for (auto it = a.begin_left(); it != a.end_left(); ++it) {
-            auto it2 = b.find_left(*it);
-            if (it2 == b.end_left() || !equiv<Right, CompareRight>(*(it.flip()), *(it2.flip())))
-                return true;
-        }
-        return false;
+        return !(a == b);
     }
     friend bool operator==(bimap const& a, bimap const& b) {
-        return !(a != b);
+        if (a.size() != b.size())
+            return false;
+        auto it_a = a.begin_left();
+        auto it_b = b.begin_left();
+        for (;it_a != a.end_left() && it_b != b.end_left(); ++it_a, ++it_b) {
+            if (*it_a != *it_b || *it_a.flip() != *it_b.flip())
+                return false;
+        }
+        return true;
     }
     // операторы >, < ???????? (лексикографическое сравнение)
 
