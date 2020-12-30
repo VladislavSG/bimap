@@ -349,9 +349,10 @@ struct bimap {
     }
 
     friend void swap(bimap &a, bimap &b) {
+        using std::swap;
         swap(a.left_map, b.left_map);
         swap(a.right_map, b.right_map);
-        std::swap(a.pair_count, b.pair_count);
+        swap(a.pair_count, b.pair_count);
     }
 
   private:

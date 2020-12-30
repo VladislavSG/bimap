@@ -211,9 +211,11 @@ struct bitree : private Compare {
     }
 
     friend void swap(bitree &a, bitree &b) {
-        std::swap(a.fake_node, b.fake_node);
+        using std::swap;
+        swap(a.fake_node, b.fake_node);
         update_parent(a.fake_node.left, &a.fake_node);
         update_parent(b.fake_node.left, &b.fake_node);
+        swap(static_cast<Compare&>(a), static_cast<Compare&>(b));
     }
 
   private:
