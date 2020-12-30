@@ -52,7 +52,7 @@ struct bimap {
         // Разыменование итератора end_left() неопределено.
         // Разыменование невалидного итератора неопределено.
         Right const& operator*() const {
-            return (*bitree_it)->key;
+            return *bitree_it;
         }
 
         // Переход к следующему по величине left'у.
@@ -98,7 +98,7 @@ struct bimap {
         // flip() невалидного итератора неопределен.
         left_iterator flip() const {
             return left_iterator(left_bitree_it_t(
-                static_cast<left_node_t const*>(static_cast<node_t const*>(*bitree_it))));
+                static_cast<left_node_t const*>(static_cast<node_t const*>(bitree_it.get_data()))));
         }
 
       private:
@@ -110,7 +110,7 @@ struct bimap {
         left_iterator(left_bitree_it_t it) : bitree_it(it) {};
 
         Left const& operator*() const {
-            return (*bitree_it)->key;
+            return *bitree_it;
         }
 
         left_iterator& operator++() {
@@ -144,7 +144,7 @@ struct bimap {
 
         right_iterator flip() const {
             return right_iterator(right_bitree_it_t(
-                static_cast<right_node_t const*>(static_cast<node_t const*>(*bitree_it))));
+                static_cast<right_node_t const*>(static_cast<node_t const*>(bitree_it.get_data()))));
         }
 
       private:
@@ -201,8 +201,9 @@ struct bimap {
     };
 
     void erase_all() {
-        for (auto it = begin_left(); it != end_left();) {
-            erase_left(it++);
+        auto it = begin_left();
+        while (it != end_left()) {
+            it = erase_left(it);
         }
         pair_count = 0;
     }
@@ -232,7 +233,7 @@ struct bimap {
     left_iterator erase_left(left_iterator it) {
         left_iterator ret(left_map.erase(it.bitree_it));
         right_map.erase(it.flip().bitree_it);
-        delete static_cast<node_t const*>(*it.bitree_it);
+        delete static_cast<node_t const*>(it.bitree_it.get_data());
         --pair_count;
         return ret;
     }
@@ -251,7 +252,7 @@ struct bimap {
     right_iterator erase_right(right_iterator it) {
         right_iterator ret(right_map.erase(it.bitree_it));
         left_map.erase(it.flip().bitree_it);
-        delete static_cast<node_t const*>(*it.bitree_it);
+        delete static_cast<node_t const*>(it.bitree_it.get_data());
         --pair_count;
         return ret;
     }
@@ -304,7 +305,7 @@ struct bimap {
         if (it == end_left()) {
             Right const new_elem{};
             erase_right(new_elem);
-            return *insert(key, new_elem).flip();
+            return *insert(key, std::move(new_elem)).flip();
         } else {
             return *it.flip();
         }
@@ -315,7 +316,7 @@ struct bimap {
         if (it == end_right()) {
             Left const new_elem{};
             erase_left(new_elem);
-            return *insert(new_elem, key);
+            return *insert(std::move(new_elem), key);
         } else {
             return *it.flip();
         }

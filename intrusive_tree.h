@@ -65,8 +65,8 @@ struct bitree {
         iterator(p_node const* n) : it_node(n) {}
         iterator(d_node* n) : it_node(n) {}
 
-        d_node const* operator*() const {
-            return &(it_node->get_data());
+        T const& operator*() const {
+            return it_node->get_data().key;
         }
 
         iterator& operator++() {
@@ -115,6 +115,10 @@ struct bitree {
             return it_node != s.it_node;
         }
 
+        d_node const* get_data() const {
+            return &(it_node->get_data());
+        }
+
       private:
         p_node const* it_node;
     };
@@ -154,8 +158,9 @@ struct bitree {
     }
 
     iterator erase(iterator it) {
-        p_node* element = const_cast<d_node*>(*it++);
+        p_node* element = const_cast<d_node*>(it.get_data());
         p_node* elem_parent = element->parent;
+        ++it;
         if (element->isLeft()) {
             merge(elem_parent->left, element->left, element->right);
             update_parent(elem_parent->left, elem_parent);
