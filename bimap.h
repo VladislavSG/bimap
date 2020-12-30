@@ -124,7 +124,9 @@ struct bimap {
         : left_map(other.left_map.get_compare()),
           right_map(other.right_map.get_compare()),
           pair_count(other.pair_count) {
-        insert_from(other);
+        for (auto it = other.begin_left(); it != other.end_left(); it++) {
+            insert(*it, *it.flip());
+        }
     }
 
     bimap(bimap &&other) noexcept
@@ -353,12 +355,5 @@ struct bimap {
         swap(a.left_map, b.left_map);
         swap(a.right_map, b.right_map);
         swap(a.pair_count, b.pair_count);
-    }
-
-  private:
-    void insert_from(bimap const &other) {
-        for (auto it = other.begin_left(); it != other.end_left(); it++) {
-            insert(*it, *it.flip());
-        }
     }
 };
