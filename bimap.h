@@ -6,15 +6,12 @@ template <typename Left, typename Right,
     typename CompareLeft = std::less<Left>,
     typename CompareRight = std::less<Right>>
 struct bimap {
-    using left_t  = Left;
-    using right_t = Right;
-
   private:
     struct left_tag;
     struct right_tag;
 
-    using left_map_t = intrusive_tree::bitree<left_t, CompareLeft, left_tag>;
-    using right_map_t = intrusive_tree::bitree<right_t, CompareRight, right_tag>;
+    using left_map_t = intrusive_tree::bitree<Left, CompareLeft, left_tag>;
+    using right_map_t = intrusive_tree::bitree<Right, CompareRight, right_tag>;
     using left_node_t = typename left_map_t::d_node;
     using right_node_t = typename right_map_t::d_node;
     using left_bitree_it_t = typename left_map_t::iterator;
@@ -24,19 +21,19 @@ struct bimap {
         left_node_t,
         right_node_t {
 
-        node_t(left_t const& a, right_t const& b)
+        node_t(Left const& a, Right const& b)
             : left_node_t(a),
               right_node_t(b) {}
 
-        node_t(left_t const& a, right_t&& b)
+        node_t(Left const& a, Right&& b)
             : left_node_t(a),
               right_node_t(std::move(b)) {}
 
-        node_t(left_t&& a, right_t const& b)
+        node_t(Left&& a, Right const& b)
             : left_node_t(std::move(a)),
               right_node_t(b) {}
 
-        node_t(left_t&& a, right_t&& b)
+        node_t(Left&& a, Right&& b)
             : left_node_t(std::move(a)),
               right_node_t(std::move(b)) {}
     };
@@ -44,7 +41,7 @@ struct bimap {
 
     left_map_t left_map;
     right_map_t right_map;
-    uint32_t pair_count = 0;
+    size_t pair_count = 0;
 
   public:
     struct left_iterator;
@@ -54,7 +51,7 @@ struct bimap {
         // Элемент на который сейчас ссылается итератор.
         // Разыменование итератора end_left() неопределено.
         // Разыменование невалидного итератора неопределено.
-        right_t const& operator*() const {
+        Right const& operator*() const {
             return (*bitree_it)->key;
         }
 
@@ -112,7 +109,7 @@ struct bimap {
     struct left_iterator {
         left_iterator(left_bitree_it_t it) : bitree_it(it) {};
 
-        left_t const& operator*() const {
+        Left const& operator*() const {
             return (*bitree_it)->key;
         }
 
@@ -158,13 +155,15 @@ struct bimap {
 
     // Создает bimap не содержащий ни одной пары.
     bimap(CompareLeft cmpLeft = CompareLeft(),
-          CompareRight cmpRight = CompareRight()) noexcept
-        : left_map(cmpLeft),
-          right_map(cmpRight) {};
+          CompareRight cmpRight = CompareRight())
+        : left_map(std::move(cmpLeft)),
+          right_map(std::move(cmpRight)) {};
 
     // Конструкторы от других и присваивания
-    bimap(bimap const& other) :
-            pair_count(other.pair_count) {
+    bimap(bimap const& other)
+        : left_map(other.left_map.get_compare()),
+          right_map(other.right_map.get_compare()),
+          pair_count(other.pair_count) {
         insert_from(other);
     }
 
@@ -175,7 +174,7 @@ struct bimap {
         other.pair_count = 0;
     }
 
-    bimap& operator=(bimap const& other) {
+    bimap& operator=(bimap const& other) noexcept {
         if (this != &other) {
             erase_all();
             insert_from(other);
@@ -185,10 +184,12 @@ struct bimap {
     }
 
     bimap& operator=(bimap&& other) noexcept {
-        left_map = std::move(other.left_map);
-        right_map = std::move(other.right_map);
-        pair_count = other.pair_count;
-        other.pair_count = 0;
+        if (this != &other) {
+            left_map = std::move(other.left_map);
+            right_map = std::move(other.right_map);
+            pair_count = other.pair_count;
+            other.pair_count = 0;
+        }
         return *this;
     }
 
@@ -203,12 +204,13 @@ struct bimap {
         for (auto it = begin_left(); it != end_left();) {
             erase_left(it++);
         }
+        pair_count = 0;
     }
 
     // Вставка пары (left, right), возвращает итератор на left.
     // Если такой left или такой right уже присутствуют в bimap, вставка не
     // производится и возвращается end_left().
-    template <typename L = left_t, typename R = right_t>
+    template <typename L = Left, typename R = Right>
     left_iterator insert(L&& left, R&& right) {
         auto ret = left_map.end();
         if (left_map.find(left) == left_map.end() &&
@@ -228,15 +230,15 @@ struct bimap {
     // Пусть it ссылается на некоторый элемент e.
     // erase инвалидирует все итераторы ссылающиеся на e и на элемент парный к e.
     left_iterator erase_left(left_iterator it) {
-        left_iterator ret(left_map.erase(*it));
-        right_map.erase(*it.flip());
+        left_iterator ret(left_map.erase(it.bitree_it));
+        right_map.erase(it.flip().bitree_it);
         delete static_cast<node_t const*>(*it.bitree_it);
         --pair_count;
         return ret;
     }
     // Аналогично erase, но по ключу, удаляет элемент если он присутствует, иначе не делает ничего
     // Возвращает была ли пара удалена
-    bool erase_left(left_t const& left) {
+    bool erase_left(Left const& left) {
         auto it = find_left(left);
         if (it == end_left()) {
             return false;
@@ -247,14 +249,14 @@ struct bimap {
     }
 
     right_iterator erase_right(right_iterator it) {
-        right_iterator ret{right_map.erase(*it)};
-        left_map.erase(*it.flip());
+        right_iterator ret(right_map.erase(it.bitree_it));
+        left_map.erase(it.flip().bitree_it);
         delete static_cast<node_t const*>(*it.bitree_it);
         --pair_count;
         return ret;
     }
 
-    bool erase_right(right_t const& right) {
+    bool erase_right(Right const& right) {
         auto it = find_right(right);
         if (it == end_right()) {
             return false;
@@ -265,27 +267,27 @@ struct bimap {
     }
 
     // Возвращает итератор по элементу. Если не найден - соответствующий end()
-    left_iterator find_left (left_t  const& left) const {
+    left_iterator find_left (Left  const& left) const {
         return left_iterator{left_map.find(left)};
     }
-    right_iterator find_right(right_t const& right) const {
+    right_iterator find_right(Right const& right) const {
         return right_iterator{right_map.find(right)};
     }
 
     // Возвращает противоположный элемент по элементу
     // Если элемента не существует -- бросает std::out_of_range
-    right_t const& at_left(left_t const& key) const {
+    Right const& at_left(Left const& key) const {
         auto it = find_left(key);
         if (it == end_left()) {
-            throw std::out_of_range("left_t key not exist");
+            throw std::out_of_range("Left key not exist");
         } else {
             return *it.flip();
         }
     }
-    left_t const& at_right(right_t const& key) const {
+    Left const& at_right(Right const& key) const {
         auto it = find_right(key);
         if (it == end_right()) {
-            throw std::out_of_range("left_t key not exist");
+            throw std::out_of_range("Left key not exist");
         } else {
             return *it.flip();
         }
@@ -296,22 +298,22 @@ struct bimap {
     // сторону кладет дефолтный элемент, ссылку на который и возвращает
     // Если дефолтный элемент уже лежит в противоположной паре - должен поменять
     // соответствующий ему элемент на запрашиваемый (смотри тесты)
-    template <typename T = right_t, std::enable_if_t<std::is_default_constructible_v<T>, bool> = true>
-    right_t const& at_left_or_default(left_t const& key) {
+    template <typename T = Right, std::enable_if_t<std::is_default_constructible_v<T>, bool> = true>
+    Right const& at_left_or_default(Left const& key) {
         auto it = find_left(key);
         if (it == end_left()) {
-            right_t const new_elem{};
+            Right const new_elem{};
             erase_right(new_elem);
             return *insert(key, new_elem).flip();
         } else {
             return *it.flip();
         }
     }
-    template <typename T = left_t, std::enable_if_t<std::is_default_constructible_v<T>, bool> = true>
-    left_t const& at_right_or_default(right_t const& key) {
+    template <typename T = Left, std::enable_if_t<std::is_default_constructible_v<T>, bool> = true>
+    Left const& at_right_or_default(Right const& key) {
         auto it = find_right(key);
         if (it == end_right()) {
-            left_t const new_elem{};
+            Left const new_elem{};
             erase_left(new_elem);
             return *insert(new_elem, key);
         } else {
@@ -322,17 +324,17 @@ struct bimap {
     // lower и upper bound'ы по каждой стороне
     // Возвращают итераторы на соответствующие элементы
     // Смотри std::lower_bound, std::upper_bound.
-    left_iterator lower_bound_left(const left_t& left) const {
+    left_iterator lower_bound_left(const Left& left) const {
         return left_iterator{left_map.lower_bound(left)};
     }
-    left_iterator upper_bound_left(const left_t& left) const {
+    left_iterator upper_bound_left(const Left& left) const {
         return left_iterator{left_map.upper_bound(left)};
     }
 
-    right_iterator lower_bound_right(const right_t& right) const {
+    right_iterator lower_bound_right(const Right& right) const {
         return right_iterator{right_map.lower_bound(right)};
     }
-    right_iterator upper_bound_right(const right_t& right) const {
+    right_iterator upper_bound_right(const Right& right) const {
         return right_iterator{right_map.upper_bound(right)};
     }
 

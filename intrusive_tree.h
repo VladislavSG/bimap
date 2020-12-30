@@ -12,7 +12,7 @@ struct default_tag;
 
 std::mt19937 rand_gen(std::random_device{}());
 
-template <typename T, typename Compare, typename Tag = default_tag>
+template <typename T, typename Compare = std::less<T>, typename Tag = default_tag>
 struct bitree {
     struct d_node;
 
@@ -62,7 +62,6 @@ struct bitree {
     };
 
     struct iterator {
-        iterator(p_node* n) : it_node(n) {}
         iterator(p_node const* n) : it_node(n) {}
         iterator(d_node* n) : it_node(n) {}
 
@@ -120,20 +119,25 @@ struct bitree {
         p_node const* it_node;
     };
 
-    explicit bitree(Compare cmp = std::less<T>()) noexcept
-        : cmp(cmp) {};
+    explicit bitree(Compare cmp = Compare()) noexcept
+        : cmp(std::move(cmp)) {};
 
     bitree(bitree&& other)  noexcept
-            : fake_node(other.fake_node) {
+            : fake_node(other.fake_node),
+              cmp(std::move(other.cmp)) {
         other.fake_node.reset();
+        update_parent(fake_node.left, &fake_node);
     }
 
     bitree& operator=(bitree&& other) noexcept {
-        fake_node = other.fake_node;
-        other.fake_node.reset();
+        if (this != &other) {
+            fake_node = other.fake_node;
+            other.fake_node.reset();
+            update_parent(fake_node.left, &fake_node);
+            cmp = std::move(other.cmp);
+        }
         return *this;
     }
-
 
     iterator find(T const& x) const {
         p_node* n = fake_node.left;
@@ -149,10 +153,17 @@ struct bitree {
         return end();
     }
 
-    iterator erase(T const& x) {
-        erase(fake_node.left, x);
-        update_parent(fake_node.left, &fake_node);
-        return lower_bound(x);
+    iterator erase(iterator it) {
+        p_node* element = const_cast<d_node*>(*it++);
+        p_node* elem_parent = element->parent;
+        if (element->isLeft()) {
+            merge(elem_parent->left, element->left, element->right);
+            update_parent(elem_parent->left, elem_parent);
+        } else {
+            merge(elem_parent->right, element->left, element->right);
+            update_parent(elem_parent->right, elem_parent);
+        }
+        return it;
     }
 
     iterator insert(d_node* x) {
@@ -203,6 +214,10 @@ struct bitree {
 
     [[nodiscard]] bool empty() const {
         return fake_node.left == nullptr;
+    }
+
+    Compare get_compare() const {
+        return cmp;
     }
 
   private:
@@ -264,20 +279,6 @@ struct bitree {
             merge(r->left, l, r->left);
             update_parent(r->left, r);
             t = r;
-        }
-    }
-
-    void erase (p_node* & t, T const& key) {
-        if (!cmp(t->get_data().key, key) && !cmp(key, t->get_data().key)) {
-            merge(t, t->left, t->right);
-        } else {
-            if (cmp(key, t->get_data().key)) {
-                erase(t->left, key);
-                update_parent(t->left, t);
-            } else {
-                erase(t->right, key);
-                update_parent(t->right, t);
-            }
         }
     }
 };
