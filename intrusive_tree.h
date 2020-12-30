@@ -3,33 +3,33 @@
 //
 
 #pragma once
-#include <utility>
 #include <cassert>
 #include <random>
+#include <utility>
 
 namespace intrusive_tree {
 struct default_tag;
 
 std::mt19937 rand_gen(std::random_device{}());
 
-template <typename T, typename Compare = std::less<T>, typename Tag = default_tag>
-struct bitree {
+template <typename T, typename Compare = std::less<T>,
+          typename Tag = default_tag>
+struct bitree : private Compare {
     struct d_node;
 
-  private:
     struct p_node {
         p_node *left = nullptr;
         p_node *right = nullptr;
         p_node *parent = nullptr;
 
-        d_node& get_data() {
+        d_node &get_data() {
             assert(parent);
-            return static_cast<d_node&>(*this);
+            return static_cast<d_node &>(*this);
         }
 
-        d_node const& get_data() const {
+        d_node const &get_data() const {
             assert(parent);
-            return static_cast<d_node const&>(*this);
+            return static_cast<d_node const &>(*this);
         }
 
         [[nodiscard]] bool isLeft() const {
@@ -44,32 +44,25 @@ struct bitree {
         }
     };
 
-  public:
     struct d_node : p_node {
         T key;
 
         explicit d_node(T key) noexcept
-            : key(std::move(key)),
-              priority(rand_gen())
-        {}
+            : key(std::move(key)), priority(rand_gen()) {}
 
-        uint_fast32_t get_pr() {
-            return priority;
-        }
+        uint_fast32_t get_pr() { return priority; }
 
       private:
         const uint_fast32_t priority;
     };
 
     struct iterator {
-        iterator(p_node const* n) : it_node(n) {}
-        iterator(d_node* n) : it_node(n) {}
+        iterator(p_node const *n) : it_node(n) {}
+        iterator(d_node *n) : it_node(n) {}
 
-        T const& operator*() const {
-            return it_node->get_data().key;
-        }
+        T const &operator*() const { return it_node->get_data().key; }
 
-        iterator& operator++() {
+        iterator &operator++() {
             if (it_node->right) {
                 it_node = it_node->right;
                 while (it_node->left)
@@ -88,7 +81,7 @@ struct bitree {
             return it;
         }
 
-        iterator& operator--() {
+        iterator &operator--() {
             if (it_node->left) {
                 it_node = it_node->left;
                 while (it_node->right)
@@ -107,44 +100,41 @@ struct bitree {
             return it;
         }
 
-        bool operator==(iterator const& s) const {
+        bool operator==(iterator const &s) const {
             return it_node == s.it_node;
         }
 
-        bool operator!=(iterator const& s) const {
+        bool operator!=(iterator const &s) const {
             return it_node != s.it_node;
         }
 
-        d_node const* get_data() const {
-            return &(it_node->get_data());
-        }
+        d_node const *get_data() const { return &(it_node->get_data()); }
 
       private:
-        p_node const* it_node;
+        p_node const *it_node;
     };
 
     explicit bitree(Compare cmp = Compare()) noexcept
-        : cmp(std::move(cmp)) {};
+        : Compare(std::move(cmp)){};
 
-    bitree(bitree&& other)  noexcept
-            : fake_node(other.fake_node),
-              cmp(std::move(other.cmp)) {
+    bitree(bitree &&other) noexcept
+        : Compare(std::move(other)), fake_node(other.fake_node) {
         other.fake_node.reset();
         update_parent(fake_node.left, &fake_node);
     }
 
-    bitree& operator=(bitree&& other) noexcept {
+    bitree &operator=(bitree &&other) noexcept {
         if (this != &other) {
+            static_cast<Compare &>(*this) = static_cast<Compare &&>(other);
             fake_node = other.fake_node;
             other.fake_node.reset();
             update_parent(fake_node.left, &fake_node);
-            cmp = std::move(other.cmp);
         }
         return *this;
     }
 
-    iterator find(T const& x) const {
-        p_node* n = fake_node.left;
+    iterator find(T const &x) const {
+        p_node *n = fake_node.left;
         while (n) {
             if (cmp(x, n->get_data().key)) {
                 n = n->left;
@@ -158,8 +148,8 @@ struct bitree {
     }
 
     iterator erase(iterator it) {
-        p_node* element = const_cast<d_node*>(it.get_data());
-        p_node* elem_parent = element->parent;
+        p_node *element = const_cast<d_node *>(it.get_data());
+        p_node *elem_parent = element->parent;
         ++it;
         if (element->isLeft()) {
             merge(elem_parent->left, element->left, element->right);
@@ -171,16 +161,15 @@ struct bitree {
         return it;
     }
 
-    iterator insert(d_node* x) {
+    iterator insert(d_node *x) {
         auto ret = insert(fake_node.left, x);
         update_parent(fake_node.left, &fake_node);
         return ret;
     }
 
-
-    iterator lower_bound(T const& x) const {
-        p_node const* n = fake_node.left;
-        p_node const* buf = &fake_node;
+    iterator lower_bound(T const &x) const {
+        p_node const *n = fake_node.left;
+        p_node const *buf = &fake_node;
         while (n) {
             if (!cmp(n->get_data().key, x)) {
                 buf = n;
@@ -192,9 +181,9 @@ struct bitree {
         return buf;
     }
 
-    iterator upper_bound(T const& x) const {
-        p_node const* n = fake_node.left;
-        p_node const* buf = &fake_node;
+    iterator upper_bound(T const &x) const {
+        p_node const *n = fake_node.left;
+        p_node const *buf = &fake_node;
         while (n) {
             if (cmp(x, n->get_data().key)) {
                 buf = n;
@@ -207,34 +196,37 @@ struct bitree {
     }
 
     iterator begin() const {
-        p_node const* cur = &fake_node;
+        p_node const *cur = &fake_node;
         while (cur->left)
             cur = cur->left;
         return cur;
     }
 
-    iterator end() const {
-        return iterator(&fake_node);
+    iterator end() const { return iterator(&fake_node); }
+
+    [[nodiscard]] bool empty() const { return fake_node.left == nullptr; }
+
+    Compare const &get_compare() const {
+        return static_cast<Compare const &>(*this);
     }
 
-    [[nodiscard]] bool empty() const {
-        return fake_node.left == nullptr;
-    }
-
-    Compare get_compare() const {
-        return cmp;
+    friend void swap(bitree &a, bitree &b) {
+        std::swap(a.fake_node, b.fake_node);
+        update_parent(a.fake_node.left, &a.fake_node);
+        update_parent(b.fake_node.left, &b.fake_node);
     }
 
   private:
     p_node fake_node;
-    Compare cmp;
 
-    void update_parent(p_node* node, p_node* parent) {
+    bool cmp(T const &a, T const &b) const { return get_compare()(a, b); }
+
+    static void update_parent(p_node *node, p_node *parent) {
         if (node)
             node->parent = parent;
     }
 
-    void split (p_node* t, T const& key, p_node* & l, p_node* & r) {
+    void split(p_node *t, T const &key, p_node *&l, p_node *&r) {
         if (!t) {
             l = r = nullptr;
         } else if (cmp(key, t->get_data().key)) {
@@ -248,7 +240,7 @@ struct bitree {
         }
     }
 
-    iterator insert (p_node* & t, p_node* it) {
+    iterator insert(p_node *&t, p_node *it) {
         if (!t) {
             t = it;
         } else {
@@ -273,7 +265,7 @@ struct bitree {
         return it;
     }
 
-    void merge (p_node* & t, p_node* l, p_node* r) {
+    void merge(p_node *&t, p_node *l, p_node *r) {
         if (!l || !r) {
             t = l ? l : r;
         } else if (l->get_data().get_pr() > r->get_data().get_pr()) {
@@ -287,4 +279,4 @@ struct bitree {
         }
     }
 };
-}
+} // namespace intrusive_tree
